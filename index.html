@@ -1,0 +1,199 @@
+<html>
+    <head>
+        <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+        <script src="https://cdn.jsdelivr.net/npm/web3@4.16.0/dist/web3.min.js"></script>
+        <!-- <script src="HelloWorld.js"></script> -->
+    </head>
+    <body>
+
+        <div id="bank" style="position:relative">
+            <div id="loader" style="position: absolute;top:0;left:0;right:0;botton:0;opacity: 0.5;text-align: center;display:none">
+            LOADING....</div>
+            <div id="bankbalnace">NOT CONNECTED YET</div>
+            <div id="bankname">NOT CONNECTED YET</div>
+            <div id="card">Card Number: -</div>
+            <div id="cvvtwo">Card CVV2: -</div>
+            <div id="expdata">Card Expiration Dat: -</div>
+            
+            
+        </div>
+        <div id="openpankholder">
+            <hr>
+            <input id="howmucheath" type="number" max="10000000">
+            Max amount of your wallet: <span id="mywalletdata"></span>
+        </div>
+        <button id="loadbankaccount">Load My Bank Account</button>
+        <div id="withdrawamount" >
+            <hr>
+            <input id="howmuchdraw" type="number" max="0">
+            <button id="withdrawbutton">withdraw</button>
+        </div>
+    </body>
+    <script>
+          async function logTxn(data, gas) {
+
+                console.log(data);
+        }
+       var web3js;
+       var web3socket;
+       var accountcreated = false;
+            App={
+                web3provider : null,
+                contract : {},
+                account:'0x0',
+                subscriber:null,
+                websocketprovider:null,
+                init:async function(){
+                    return await App.initweb3();
+                },
+                initweb3:async function(){
+                    if(typeof web3 !=='undefined'){
+                        App.web3provider = window.ethereum;
+                        web3js=new Web3(App.web3provider);
+                        
+                    }
+                    else{
+                        App.web3provider= Web3.providers.HttpProvider('http://localhost:7545');
+                        web3js = new Web3(App.web3provider);
+                    }
+                    
+                    return await App.initContract();
+                },
+                initContract:async function(){
+                    fetch("./build/contracts/HelloWorld.json")
+                        .then((res=>res.json()))
+                        .then(async function(data) {
+                            var myContractABI = data;
+                            // console.log(myContractABI);
+                            App.contract = new web3js.eth.Contract(myContractABI.abi, "0x551F81cAE7138c939b149d49E44996fd9E9c4105");
+                            App.websocketprovider = new Web3(new Web3.providers.WebsocketProvider('ws://localhost:7545'));
+                            let options = { address: '0x551F81cAE7138c939b149d49E44996fd9E9c4105'};
+                            subscribe = await App.websocketprovider.eth.subscribe('logs', options, (err, res) => {});
+                            subscribe.on("data", (txHash) => {
+                                setTimeout(async () => {
+                                try {
+                                    console.log(txHash);
+                                    let tx = await App.web3provider.getTransaction(txHash);
+                                    console.log(tx)
+                                } catch (err) {
+                                    console.error(err);
+                                }
+                                });
+                            });
+    //   .on('data', async (tx) => {
+    //                             const txnData = await provider.getTransaction(tx);
+    //                             // console.log(txnData);
+    //                             if (txnData) {
+    //                                 let gas = txnData['gasPrice'];
+    //                                 if (txnData.to == "0x551F81cAE7138c939b149d49E44996fd9E9c4105" ) {
+    //                                     let decoded = interface.decodeFunctionData(myContractABI.abi,  txnData['data']);
+    //                                     logTxn(decoded, gas);
+    //                                 }
+    //                             } 
+    //                         })
+
+                           
+                            return await App.render();
+                        })
+                        .catch((error) =>console.error("Unable to fetch data:", error));
+                },
+                render: async function() {
+
+                    
+                    web3js.eth.getAccounts().then(async function(accounts){
+                       
+                                    // App.contract.methods.getAref().call().then(function(zombie) {
+                                    //     alert(zombie)
+                                    // });
+                                    App.account = accounts[0];
+                                    
+                                    App.contract.events.MyWholeFuckingData({ filter: { owner: App.account } })
+                                    .on("data", function(event) {
+                                        accountcreated=true;
+                                        $('#withdrawamount').show();
+                                        $('#howmuchdraw').attr("max",Number(event.returnValues.balance)* 10**-18);
+                                        $('#bankbalnace').text("balance: "+Number(event.returnValues.balance)* 10**-18);
+                                        $('#card').text("cardnumber: "+event.returnValues.CardNumber);
+                                        $('#cvvtwo').text("cvv2: "+event.returnValues.CVV2);
+                                        $('#expdata').text("exp dat: "+event.returnValues.year+"-"+event.returnValues.year);
+                                    });
+                                    App.contract.events.BankCartCreated({ filter: { owner: App.account } })
+                                    .on("data", function(event) {
+                                        $('#card').text("cardnumber: "+event.returnValues.CardNumber);
+                                    });
+                                    App.contract.events.BankAccountCreated({ filter: { owner: App.account } })
+                                    .on("data", function(event) {
+                                        $('#bankname').text("name of account: "+Number(event.returnValues.name)* 10**-18);
+                                    });
+                                    await web3js.eth.getBalance(App.account).then(async function(number){
+                                        
+                                       $('#openpankholder span').text( parseInt(Number(number)* 10 ** -18));
+                                       $('#howmucheath').attr('max',parseInt(Number(number)* 10 ** -18));
+                                       $('#howmucheath').val(parseInt(Number(number)* 10 ** -18));
+                                       await App.contract.methods.getAllMyFuckingData().send({from:App.account}).then(function(data){
+                                            
+                                        }).catch((error) => {
+                                        });
+                                    })
+                    });
+                    
+                },
+                loadBankAccount:async function(){
+                    if(accountcreated){
+                        await App.contract.methods.incraeseBankAccountAmount().send({from:App.account,value:$('#howmucheath').val()* 10 ** 18}).then(function(data){
+                            
+                            }).catch((error) => {
+                            });
+                    }else{
+                        await App.contract.methods.createAccount('mamad')
+                        .send({from:App.account, gas: 3000000,value:$('#howmucheath').val()* 10 ** 18})
+                        .then(function(data){
+                            $('#loader').hide();
+                            accountcreated=true;
+                            App.contract.methods.getACard().send({from:App.account}).then(function(data){
+                                
+                            }).on("BankCartCreated", function(data) {
+                                // alert('Bank Card Created');
+                            }).catch((error) => {
+                            });
+                        })
+                        .on("BankAccountCreated", function(data) {
+                            $('#loader').hide();
+                            // alert('Bank account created wait for card creation');
+                        }).catch((error) => {
+                            $('#loader').hide();
+                        });
+                    }
+                   
+                },
+                withdraw: async function(){
+                    if(accountcreated){
+                        await App.contract.methods.withdrawfromMyAccount($(document).find('#howmuchdraw').val()* 10 ** 18).send({from:App.account}).then(function(data){
+                                // alert('Bank Value withdrawn');  
+                            }).catch((error) => {
+                            });
+                    }else{
+                        alert("you have no account yet");
+                    }
+                }
+            };
+        window.addEventListener('load', async function() {
+
+            const accounts = await ethereum.request({
+                method: 'eth_requestAccounts',
+            });
+            await App.init();
+            $('#loadbankaccount').on('click',async function(){
+                $('#loader').show();
+                await App.loadBankAccount();
+                $('#loader').hide();
+            });
+            $(document).on('click','#withdrawbutton',async function(){
+                $('#loader').show();
+                await App.withdraw();
+                $('#loader').hide();
+            });
+        })
+        
+    </script>
+</html>
